@@ -6,6 +6,9 @@ A small static Mabinogi Erinn time clock with browser alarms.
 - Real-world 1 second = 40 Erinn seconds
 - Alarms are stored in `localStorage`
 - Clock display updates 10 times per second
+- Analog hands use sub-second Erinn time for smoother movement
+- Alarm volume is user configurable
+- Test button plays sound and sends a real browser notification when permission is granted
 - Default baseline uses UTC-7, matching common Mabinogi timer calculations
 - Optional extra offset calibration: `?offset=120` means add 120 real seconds before converting to Erinn time
 

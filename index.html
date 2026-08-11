@@ -241,6 +241,11 @@
       font: inherit;
     }
 
+    input[type="range"] {
+      padding-inline: 0;
+      accent-color: var(--accent2);
+    }
+
     button {
       cursor: pointer;
       border: 0;
@@ -322,8 +327,8 @@
           <div id="erinnTime" class="big-time">--:--</div>
           <div class="grid">
             <div class="card"><div class="label">現實時間</div><div id="realTime" class="value">--:--:--</div></div>
-            <div class="card"><div class="label">下一個 6:00</div><div id="nextDawn" class="value">--:--</div></div>
-            <div class="card"><div class="label">下一個 18:00</div><div id="nextDusk" class="value">--:--</div></div>
+            <div class="card"><div class="label">下一個天亮（6:00）</div><div id="nextDawn" class="value">--:--</div></div>
+            <div class="card"><div class="label">下一個天黑（18:00）</div><div id="nextDusk" class="value">--:--</div></div>
           </div>
         </div>
       </div>
@@ -342,10 +347,13 @@
           <label class="wide">備註
             <input id="alarmLabel" type="text" maxlength="40" placeholder="例如：去打王、等夜晚、採集時間" />
           </label>
+          <label class="wide">鬧鈴音量：<span id="volumeValue">80%</span>
+            <input id="alarmVolume" type="range" min="0" max="100" value="80" />
+          </label>
           <button id="addAlarm">加入鬧鈴</button>
-          <button id="testSound" class="secondary">測試聲音</button>
+          <button id="testSound" class="secondary">測試聲音/通知</button>
         </div>
-        <p id="permissionHint" class="sub" style="margin:14px 0 0">第一次響鈴前，請先按一次「測試聲音」讓瀏覽器允許播放聲音。</p>
+        <p id="permissionHint" class="sub" style="margin:14px 0 0">第一次響鈴前，請先按一次「測試聲音/通知」讓瀏覽器允許播放聲音與通知。</p>
       </div>
 
       <div class="card">
@@ -369,16 +377,20 @@
     const userOffsetSeconds = Number(params.get('offset') || localStorage.getItem('erinnClockOffset') || 0);
     const offsetSeconds = BASE_OFFSET_SECONDS + userOffsetSeconds;
     const STORAGE_KEY = 'mabinogi-erinn-alarms-v1';
+    const VOLUME_KEY = 'mabinogi-erinn-alarm-volume-v1';
 
     const $ = (id) => document.getElementById(id);
     const pad = (n) => String(Math.floor(n)).padStart(2, '0');
     let audioCtx;
     let alarms = loadAlarms();
     let lastSecondOfDay = null;
+    let lastAlarmRenderKey = '';
+    let alarmVolume = Number(localStorage.getItem(VOLUME_KEY) || 80) / 100;
 
-    function erinnSecondOfDay(date = new Date()) {
-      const realSeconds = Math.floor(date.getTime() / 1000) + offsetSeconds;
-      return ((realSeconds * 40) % ERINN_DAY_SECONDS + ERINN_DAY_SECONDS) % ERINN_DAY_SECONDS;
+    function erinnSecondOfDay(date = new Date(), precise = false) {
+      const realSeconds = date.getTime() / 1000 + offsetSeconds;
+      const erinnSeconds = ((realSeconds * 40) % ERINN_DAY_SECONDS + ERINN_DAY_SECONDS) % ERINN_DAY_SECONDS;
+      return precise ? erinnSeconds : Math.floor(erinnSeconds);
     }
 
     function parseErinn(sec) {
@@ -410,22 +422,24 @@
     function updateClock() {
       const now = new Date();
       const sec = erinnSecondOfDay(now);
+      const preciseSec = erinnSecondOfDay(now, true);
       const { h, m, s } = parseErinn(sec);
       $('erinnTime').textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
       $('realTime').textContent = now.toLocaleTimeString('zh-TW', { hour12: false });
-      $('nextDawn').textContent = formatDuration(realUntil(6, 0, sec));
-      $('nextDusk').textContent = formatDuration(realUntil(18, 0, sec));
+      $('nextDawn').textContent = formatDuration(realUntil(6, 0, preciseSec));
+      $('nextDusk').textContent = formatDuration(realUntil(18, 0, preciseSec));
 
-      $('hourHand').style.transform = `rotate(${((h % 12) + m / 60) * 30}deg)`;
-      $('minuteHand').style.transform = `rotate(${(m + s / 60) * 6}deg)`;
-      $('secondHand').style.transform = `rotate(${s * 6}deg)`;
+      $('hourHand').style.transform = `rotate(${(preciseSec / 3600 % 12) * 30}deg)`;
+      $('minuteHand').style.transform = `rotate(${(preciseSec / 60 % 60) * 6}deg)`;
+      $('secondHand').style.transform = `rotate(${(preciseSec % 60) * 6}deg)`;
 
       const isDay = h >= 6 && h < 18;
       $('phase').textContent = isDay ? '☀️ 白天' : '🌙 夜晚';
 
       checkAlarms(sec, lastSecondOfDay);
       lastSecondOfDay = sec;
-      renderAlarms(sec);
+      maybeRenderAlarms();
+      updateAlarmCountdowns(preciseSec);
     }
 
     function loadAlarms() {
@@ -445,7 +459,7 @@
       alarms.push({ id: crypto.randomUUID(), hour: h, minute: m, label: $('alarmLabel').value.trim(), enabled: true, lastFiredKey: '' });
       $('alarmLabel').value = '';
       saveAlarms();
-      renderAlarms(erinnSecondOfDay());
+      renderAlarms();
       showToast(`已加入 ${pad(h)}:${pad(m)} 的鬧鈴`);
     }
 
@@ -457,14 +471,14 @@
     function deleteAlarm(id) {
       alarms = alarms.filter(a => a.id !== id);
       saveAlarms();
-      renderAlarms(erinnSecondOfDay());
+      renderAlarms();
     }
 
     function toggleAlarm(id) {
       const alarm = alarms.find(a => a.id === id);
       if (alarm) alarm.enabled = !alarm.enabled;
       saveAlarms();
-      renderAlarms(erinnSecondOfDay());
+      renderAlarms();
     }
 
     function crossedTarget(prev, current, target) {
@@ -487,12 +501,19 @@
       saveAlarms();
     }
 
-    function renderAlarms(sec = erinnSecondOfDay()) {
+    function maybeRenderAlarms() {
+      const key = alarms.map(a => `${a.id}:${a.enabled}:${a.hour}:${a.minute}:${a.label}`).join('|');
+      if (key !== lastAlarmRenderKey) renderAlarms();
+    }
+
+    function renderAlarms() {
       const list = $('alarmList');
+      lastAlarmRenderKey = alarms.map(a => `${a.id}:${a.enabled}:${a.hour}:${a.minute}:${a.label}`).join('|');
       if (alarms.length === 0) {
         list.innerHTML = '<div class="sub" style="margin:0">還沒有鬧鈴。先加一個 6:00 或 18:00 吧～</div>';
         return;
       }
+      const sec = erinnSecondOfDay(new Date(), true);
       list.innerHTML = alarms
         .slice()
         .sort((a, b) => realUntil(a.hour, a.minute, sec) - realUntil(b.hour, b.minute, sec))
@@ -500,13 +521,20 @@
           <div class="alarm-item">
             <div>
               <div class="alarm-time">${pad(a.hour)}:${pad(a.minute)}</div>
-              <div class="alarm-note">${escapeHtml(a.label || '愛爾琳時間到')} · ${a.enabled ? '<span class="status-ok">啟用</span>' : '<span class="status-warn">暫停</span>'} · 還有 ${formatDuration(realUntil(a.hour, a.minute, sec))}</div>
+              <div class="alarm-note">${escapeHtml(a.label || '愛爾琳時間到')} · ${a.enabled ? '<span class="status-ok">啟用</span>' : '<span class="status-warn">暫停</span>'} · 還有 <span data-countdown="${a.id}">${formatDuration(realUntil(a.hour, a.minute, sec))}</span></div>
             </div>
             <div style="display:grid; gap:7px; min-width:88px">
               <button class="secondary" onclick="toggleAlarm('${a.id}')">${a.enabled ? '暫停' : '啟用'}</button>
               <button class="danger" onclick="deleteAlarm('${a.id}')">刪除</button>
             </div>
           </div>`).join('');
+    }
+
+    function updateAlarmCountdowns(sec = erinnSecondOfDay(new Date(), true)) {
+      for (const alarm of alarms) {
+        const el = document.querySelector(`[data-countdown="${alarm.id}"]`);
+        if (el) el.textContent = formatDuration(realUntil(alarm.hour, alarm.minute, sec));
+      }
     }
 
     function escapeHtml(str) {
@@ -518,17 +546,18 @@
       if (audioCtx.state === 'suspended') await audioCtx.resume();
     }
 
-    async function beep() {
+    async function beep(volume = alarmVolume) {
       await ensureAudio();
       const now = audioCtx.currentTime;
       const notes = [523.25, 659.25, 783.99, 1046.5];
+      const maxGain = Math.max(0, Math.min(1, volume)) * 0.55;
       notes.forEach((freq, i) => {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = 'sine';
         osc.frequency.value = freq;
         gain.gain.setValueAtTime(0.0001, now + i * .18);
-        gain.gain.exponentialRampToValueAtTime(0.22, now + i * .18 + .03);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, maxGain), now + i * .18 + .03);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + i * .18 + .16);
         osc.connect(gain).connect(audioCtx.destination);
         osc.start(now + i * .18);
@@ -557,12 +586,29 @@
     }
 
     $('addAlarm').addEventListener('click', addAlarm);
+    $('alarmVolume').value = Math.round(alarmVolume * 100);
+    $('volumeValue').textContent = `${Math.round(alarmVolume * 100)}%`;
+    $('alarmVolume').addEventListener('input', (event) => {
+      alarmVolume = Number(event.target.value) / 100;
+      localStorage.setItem(VOLUME_KEY, event.target.value);
+      $('volumeValue').textContent = `${event.target.value}%`;
+    });
     $('testSound').addEventListener('click', async () => {
       await beep();
-      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
-      showToast('聲音測試 OK，瀏覽器應該願意叫妳了 `ദ്ദി˶ｰ̀֊ｰ́ )`');
+      let notificationText = '這個瀏覽器不支援通知';
+      if ('Notification' in window) {
+        const permission = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission;
+        if (permission === 'granted') {
+          new Notification('愛爾琳鬧鈴測試', { body: '通知也會正常跳出來。' });
+          notificationText = '通知測試已送出';
+        } else {
+          notificationText = '通知權限未開啟';
+        }
+      }
+      showToast(`聲音測試 OK，${notificationText}`);
     });
 
+    renderAlarms();
     updateClock();
     setInterval(updateClock, 100);
   </script>
