@@ -306,7 +306,7 @@
   <main>
     <section class="hero">
       <h1>愛爾琳時鐘</h1>
-      <p class="sub">瑪奇時間顯示器＋瀏覽器鬧鈴。現實 36 分鐘 = 愛爾琳 1 天；預設套用常見 timer 基準偏移（UTC -7 小時）。</p>
+      <p class="sub">瑪奇時間顯示器＋瀏覽器鬧鈴。現實 36 分鐘 = 愛爾琳 1 天；預設套用常見 timer 基準偏移（UTC -7 小時），每秒更新 10 次。</p>
 
       <div class="time-wrap">
         <div class="clock-face" aria-label="愛爾琳類比時鐘">
@@ -564,7 +564,7 @@
     });
 
     updateClock();
-    setInterval(updateClock, 250);
+    setInterval(updateClock, 100);
   </script>
 </body>
 </html>
