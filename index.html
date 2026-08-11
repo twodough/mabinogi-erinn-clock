@@ -182,7 +182,7 @@
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 12px;
     }
 
@@ -244,6 +244,29 @@
     input[type="range"] {
       padding-inline: 0;
       accent-color: var(--accent2);
+    }
+
+    .settings-panel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,.12);
+    }
+
+    .preset-panel {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,.12);
+      display: grid;
+      gap: 12px;
+    }
+
+    .preset-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
     }
 
     button {
@@ -311,7 +334,7 @@
   <main>
     <section class="hero">
       <h1>愛爾琳時鐘</h1>
-      <p class="sub">瑪奇時間顯示器＋瀏覽器鬧鈴。現實 36 分鐘 = 愛爾琳 1 天；預設套用常見 timer 基準偏移（UTC -7 小時），每秒更新 10 次。</p>
+      <p class="sub">瑪奇時間顯示器＋瀏覽器鬧鈴。現實 36 分鐘 = 愛爾琳 1 天；以台灣時間作為基準，可自行調整更新頻率與鬧鈴音量。</p>
 
       <div class="time-wrap">
         <div class="clock-face" aria-label="愛爾琳類比時鐘">
@@ -326,9 +349,10 @@
           <div id="phase" class="phase">🌙 夜晚</div>
           <div id="erinnTime" class="big-time">--:--</div>
           <div class="grid">
-            <div class="card"><div class="label">現實時間</div><div id="realTime" class="value">--:--:--</div></div>
+            <div class="card"><div class="label">台灣時間</div><div id="realTime" class="value">--:--:--</div></div>
             <div class="card"><div class="label">下一個天亮（6:00）</div><div id="nextDawn" class="value">--:--</div></div>
             <div class="card"><div class="label">下一個天黑（18:00）</div><div id="nextDusk" class="value">--:--</div></div>
+            <div class="card"><div class="label">愛爾琳星期</div><div id="erinnWeekday" class="value">--</div></div>
           </div>
         </div>
       </div>
@@ -347,12 +371,30 @@
           <label class="wide">備註
             <input id="alarmLabel" type="text" maxlength="40" placeholder="例如：去打王、等夜晚、採集時間" />
           </label>
-          <label class="wide">鬧鈴音量：<span id="volumeValue">80%</span>
-            <input id="alarmVolume" type="range" min="0" max="100" value="80" />
-          </label>
           <button id="addAlarm">加入鬧鈴</button>
           <button id="testSound" class="secondary">測試聲音/通知</button>
         </div>
+
+        <div class="preset-panel">
+          <label>Preset 鬧鈴
+            <select id="presetSelect"></select>
+          </label>
+          <div class="preset-actions">
+            <button id="addPresetStart" class="secondary">加入開始提醒</button>
+            <button id="addPresetReport" class="secondary">加入回報提醒</button>
+          </div>
+          <div id="presetInfo" class="sub" style="margin:0"></div>
+        </div>
+
+        <details class="settings-panel">
+          <summary class="wide" style="cursor:pointer; font-weight:800">設定</summary>
+          <label>更新頻率：<span id="refreshValue">2 次/秒</span>
+            <input id="refreshRate" type="range" min="1" max="10" value="2" />
+          </label>
+          <label>鬧鈴音量：<span id="volumeValue">80%</span>
+            <input id="alarmVolume" type="range" min="0" max="100" value="80" />
+          </label>
+        </details>
         <p id="permissionHint" class="sub" style="margin:14px 0 0">第一次響鈴前，請先按一次「測試聲音/通知」讓瀏覽器允許播放聲音與通知。</p>
       </div>
 
@@ -362,7 +404,7 @@
       </div>
     </section>
 
-    <p class="footer">公式：現實 1 秒 = 愛爾琳 40 秒，基準預設為 UTC -7 小時。若你的遊戲內時間仍有偏移，可用網址參數微調：<code>?offset=秒數</code>，例如 <code>?offset=120</code>。</p>
+    <p class="footer">公式：現實 1 秒 = 愛爾琳 40 秒，基準使用台灣時間（Asia/Taipei）。若你的遊戲內時間仍有偏移，可用網址參數微調：<code>?offset=秒數</code>，例如 <code>?offset=120</code>。</p>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="assertive"></div>
@@ -371,9 +413,9 @@
     const ERINN_DAY_REAL_MS = 36 * 60 * 1000;
     const ERINN_DAY_SECONDS = 24 * 60 * 60;
     const params = new URLSearchParams(location.search);
-    // Mabinogi timer sites commonly calculate Erinn time from server time at UTC-7.
-    // The optional offset is an extra calibration in real-world seconds.
-    const BASE_OFFSET_SECONDS = -7 * 60 * 60;
+    // Taiwan Mabinogi should be anchored to Taiwan time; UTC-7 only happened to match
+    // the time-of-day because it differs by a whole number of Erinn days, but weekdays break.
+    const BASE_OFFSET_SECONDS = 8 * 60 * 60;
     const userOffsetSeconds = Number(params.get('offset') || localStorage.getItem('erinnClockOffset') || 0);
     const offsetSeconds = BASE_OFFSET_SECONDS + userOffsetSeconds;
     const STORAGE_KEY = 'mabinogi-erinn-alarms-v1';
@@ -386,6 +428,41 @@
     let lastSecondOfDay = null;
     let lastAlarmRenderKey = '';
     let alarmVolume = Number(localStorage.getItem(VOLUME_KEY) || 80) / 100;
+    let refreshRate = clamp(Number(localStorage.getItem(REFRESH_KEY) || 2), 1, 10);
+    let refreshTimer = null;
+
+    const PRESETS = [
+      { id: 'mushroom-start', category: '採集', name: '蘑菇出現', start: '20:00', report: '04:00', reportLabel: '蘑菇消失', note: '蘑菇通常在夜晚 20:00～04:00 出現' },
+      { id: 'general', category: '兼職', name: '一般：迪恩 / 特蕾西', start: '07:00' },
+      { id: 'food', category: '兼職', name: '食品店：凱琳 / 格莉娜 / 佛瑞哲', start: '12:00' },
+      { id: 'food-belfast', category: '兼職', name: '食品店：芭娜蕾', start: '09:00' },
+      { id: 'suna', category: '兼職', name: '蘇娜', start: '08:00', note: '現實週一～週五 Channel 5；每月最後一個週六那週例外' },
+      { id: 'church', category: '兼職', name: '教堂', start: '12:00' },
+      { id: 'healer', category: '兼職', name: '醫療所', start: '06:00' },
+      { id: 'healer-camp', category: '兼職', name: '醫療所：希布林', start: '12:00' },
+      { id: 'bank-tara', category: '兼職', name: '銀行：奇斯', start: '07:00' },
+      { id: 'bank-belfast', category: '兼職', name: '銀行：蒙特', start: '06:00' },
+      { id: 'blacksmith', category: '兼職', name: '鐵匠鋪', start: '12:00' },
+      { id: 'grocery', category: '兼職', name: '雜貨店', start: '07:00' },
+      { id: 'adventurer', category: '兼職', name: '探險家聯合公會：伊文', start: '07:00' },
+      { id: 'clothing', category: '兼職', name: '服飾店', start: '07:00' },
+      { id: 'bookstore', category: '兼職', name: '書店：蕾拉', start: '13:00' },
+      { id: 'weapon', category: '兼職', name: '武器店', start: '15:00' },
+      { id: 'inn', category: '兼職', name: '旅館：皮爾斯', start: '07:00' },
+      { id: 'mine', category: '兼職', name: '採礦場：史恩', start: '10:00' },
+      { id: 'pub', category: '兼職', name: '小酒館：貝里', start: '10:00' },
+      { id: 'music', category: '兼職', name: '音樂商店：納里', start: '10:00' },
+      { id: 'flower', category: '兼職', name: '花店：黛兒', start: '08:00' },
+      { id: 'library', category: '兼職', name: '圖書館：史帝華', start: '09:00' },
+      { id: 'alchemy', category: '兼職', name: '鍊金術師工坊：阿依巴', start: '09:00' },
+      { id: 'painter', category: '兼職', name: '街頭畫家：漢斯', start: '07:00' },
+      { id: 'jousting', category: '兼職', name: '騎士競技場：莉莉絲', start: '10:00' },
+      { id: 'court', category: '兼職', name: '法皇廳：卡爾汀', start: '08:00' },
+      { id: 'lighthouse', category: '兼職', name: '燈塔：阿斯克', start: '16:00' },
+      { id: 'puppet', category: '兼職', name: '人偶工房：雷利', start: '07:00' },
+    ];
+
+    const ERINN_WEEKDAYS = ['愛爾琳星期日 Imbolic', '愛爾琳星期一 Alban Eiler', '愛爾琳星期二 Beltane', '愛爾琳星期三 Alban Heruin', '愛爾琳星期四 Lughnasadh', '愛爾琳星期五 Alban Elved', '愛爾琳星期六 Samhain'];
 
     function erinnSecondOfDay(date = new Date(), precise = false) {
       const realSeconds = date.getTime() / 1000 + offsetSeconds;
@@ -398,6 +475,21 @@
       const m = Math.floor((sec % 3600) / 60);
       const s = sec % 60;
       return { h, m, s };
+    }
+
+    function taipeiWeekday(date = new Date()) {
+      const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'Asia/Taipei' }).format(date);
+      return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday);
+    }
+
+    function parseTime(value) {
+      const [h, m] = value.split(':').map(Number);
+      return { hour: h, minute: m };
+    }
+
+    function addErinnHours(time, hours) {
+      const { hour, minute } = parseTime(time);
+      return `${pad((hour + hours) % 24)}:${pad(minute)}`;
     }
 
     function formatErinn(sec) {
@@ -425,7 +517,8 @@
       const preciseSec = erinnSecondOfDay(now, true);
       const { h, m, s } = parseErinn(sec);
       $('erinnTime').textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
-      $('realTime').textContent = now.toLocaleTimeString('zh-TW', { hour12: false });
+      $('realTime').textContent = now.toLocaleTimeString('zh-TW', { hour12: false, timeZone: 'Asia/Taipei' });
+      $('erinnWeekday').textContent = ERINN_WEEKDAYS[taipeiWeekday(now)];
       $('nextDawn').textContent = formatDuration(realUntil(6, 0, preciseSec));
       $('nextDusk').textContent = formatDuration(realUntil(18, 0, preciseSec));
 
@@ -451,16 +544,39 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(alarms));
     }
 
+    function selectedPreset() {
+      return PRESETS.find(preset => preset.id === $('presetSelect').value) || PRESETS[0];
+    }
+
+    function addAlarmAt(hour, minute, label) {
+      alarms.push({ id: crypto.randomUUID(), hour, minute, label, enabled: true, lastFiredKey: '' });
+      saveAlarms();
+      renderAlarms();
+      showToast(`已加入 ${pad(hour)}:${pad(minute)} 的鬧鈴`);
+    }
+
+    function addPreset(kind) {
+      const preset = selectedPreset();
+      const time = kind === 'report' ? (preset.report || addErinnHours(preset.start, 2)) : preset.start;
+      const { hour, minute } = parseTime(time);
+      const label = kind === 'report' ? (preset.reportLabel || `${preset.name} 回報`) : preset.name;
+      addAlarmAt(hour, minute, label);
+    }
+
+    function updatePresetInfo() {
+      const preset = selectedPreset();
+      const report = preset.report || addErinnHours(preset.start, 2);
+      $('presetInfo').textContent = `${preset.category}｜開始 ${preset.start}，回報 ${report}${preset.report ? '' : '（暫以開始後 2 小時計）'}${preset.note ? '｜' + preset.note : ''}`;
+    }
+
     function addAlarm() {
       const h = clamp(Number($('alarmHour').value), 0, 23);
       const m = clamp(Number($('alarmMinute').value), 0, 59);
       $('alarmHour').value = h;
       $('alarmMinute').value = m;
-      alarms.push({ id: crypto.randomUUID(), hour: h, minute: m, label: $('alarmLabel').value.trim(), enabled: true, lastFiredKey: '' });
+      const label = $('alarmLabel').value.trim();
       $('alarmLabel').value = '';
-      saveAlarms();
-      renderAlarms();
-      showToast(`已加入 ${pad(h)}:${pad(m)} 的鬧鈴`);
+      addAlarmAt(h, m, label);
     }
 
     function clamp(n, min, max) {
@@ -585,7 +701,29 @@
       showToast.timer = setTimeout(() => toast.classList.remove('show'), 7000);
     }
 
+    function applyRefreshRate() {
+      clearInterval(refreshTimer);
+      refreshTimer = setInterval(updateClock, 1000 / refreshRate);
+      $('refreshValue').textContent = `${refreshRate} 次/秒`;
+    }
+
+    function initPresets() {
+      $('presetSelect').innerHTML = PRESETS.map(preset => `<option value="${preset.id}">${preset.category}｜${preset.name}</option>`).join('');
+      $('presetSelect').addEventListener('change', updatePresetInfo);
+      $('addPresetStart').addEventListener('click', () => addPreset('start'));
+      $('addPresetReport').addEventListener('click', () => addPreset('report'));
+      updatePresetInfo();
+    }
+
     $('addAlarm').addEventListener('click', addAlarm);
+    initPresets();
+    $('refreshRate').value = refreshRate;
+    $('refreshValue').textContent = `${refreshRate} 次/秒`;
+    $('refreshRate').addEventListener('input', (event) => {
+      refreshRate = clamp(Number(event.target.value), 1, 10);
+      localStorage.setItem(REFRESH_KEY, refreshRate);
+      applyRefreshRate();
+    });
     $('alarmVolume').value = Math.round(alarmVolume * 100);
     $('volumeValue').textContent = `${Math.round(alarmVolume * 100)}%`;
     $('alarmVolume').addEventListener('input', (event) => {
@@ -610,7 +748,7 @@
 
     renderAlarms();
     updateClock();
-    setInterval(updateClock, 100);
+    applyRefreshRate();
   </script>
 </body>
 </html>
