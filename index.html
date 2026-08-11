@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>瑪奇愛爾琳時鐘與鬧鈴</title>
+  <meta name="description" content="Mabinogi Erinn time clock with browser alarm." />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg0: #0e1728;
+      --bg1: #17243d;
+      --card: rgba(255, 255, 255, 0.11);
+      --card-strong: rgba(255, 255, 255, 0.17);
+      --text: #f8fbff;
+      --muted: #b7c5d8;
+      --accent: #90e0ef;
+      --accent2: #f9d56e;
+      --danger: #ff8fab;
+      --ok: #9bf6b4;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100svh;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 20% 10%, rgba(144, 224, 239, .32), transparent 32%),
+        radial-gradient(circle at 78% 26%, rgba(249, 213, 110, .22), transparent 28%),
+        linear-gradient(135deg, var(--bg0), var(--bg1) 62%, #251f45);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(#ffffff 0.8px, transparent 0.9px),
+        radial-gradient(#ffffff 0.6px, transparent 0.7px);
+      background-size: 92px 92px, 137px 137px;
+      background-position: 0 0, 34px 48px;
+      opacity: .28;
+      mask-image: linear-gradient(to bottom, #000 0%, transparent 78%);
+    }
+
+    main {
+      width: min(960px, 100%);
+      display: grid;
+      gap: 18px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero {
+      border: 1px solid rgba(255, 255, 255, .2);
+      background: linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.06));
+      box-shadow: 0 28px 80px rgba(0, 0, 0, .42);
+      border-radius: 30px;
+      padding: clamp(22px, 4vw, 42px);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "✦";
+      position: absolute;
+      top: 22px;
+      right: 34px;
+      font-size: 84px;
+      color: rgba(255,255,255,.08);
+      transform: rotate(12deg);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      letter-spacing: .08em;
+      font-size: clamp(24px, 4vw, 42px);
+    }
+
+    .sub {
+      margin: 0 0 28px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .time-wrap {
+      display: grid;
+      grid-template-columns: 210px 1fr;
+      gap: clamp(18px, 4vw, 36px);
+      align-items: center;
+    }
+
+    @media (max-width: 720px) {
+      .time-wrap { grid-template-columns: 1fr; }
+      .clock-face { margin-inline: auto; }
+    }
+
+    .clock-face {
+      width: 210px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 10px solid rgba(255,255,255,.14);
+      background:
+        conic-gradient(from 180deg, #12172e 0deg 90deg, #25345b 90deg 180deg, #7e7040 180deg 270deg, #1a3153 270deg 360deg);
+      box-shadow: inset 0 0 35px rgba(0,0,0,.45), 0 20px 55px rgba(0,0,0,.35);
+      position: relative;
+    }
+
+    .clock-face::before {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border-radius: 50%;
+      border: 1px dashed rgba(255,255,255,.28);
+    }
+
+    .hand {
+      position: absolute;
+      left: 50%;
+      bottom: 50%;
+      transform-origin: 50% 100%;
+      border-radius: 99px;
+      translate: -50% 0;
+    }
+
+    .hour { width: 8px; height: 54px; background: var(--accent2); }
+    .minute { width: 5px; height: 76px; background: var(--accent); }
+    .second { width: 2px; height: 86px; background: #ffafcc; }
+    .pin {
+      position: absolute;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      left: 50%; top: 50%;
+      translate: -50% -50%;
+      box-shadow: 0 0 0 6px rgba(255,255,255,.15);
+    }
+    .mark {
+      position: absolute;
+      font-weight: 800;
+      text-shadow: 0 2px 8px rgba(0,0,0,.45);
+      color: rgba(255,255,255,.9);
+    }
+    .m0 { top: 8px; left: 50%; translate: -50% 0; }
+    .m6 { right: 13px; top: 50%; translate: 0 -50%; }
+    .m12 { bottom: 8px; left: 50%; translate: -50% 0; }
+    .m18 { left: 13px; top: 50%; translate: 0 -50%; }
+
+    .readout {
+      display: grid;
+      gap: 14px;
+    }
+
+    .big-time {
+      font-size: clamp(54px, 12vw, 116px);
+      font-weight: 850;
+      line-height: .95;
+      letter-spacing: -.05em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .phase {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: fit-content;
+      padding: 8px 13px;
+      border-radius: 999px;
+      background: var(--card-strong);
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    @media (max-width: 720px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      border: 1px solid rgba(255,255,255,.16);
+      background: var(--card);
+      border-radius: 22px;
+      padding: 18px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 12px 32px rgba(0,0,0,.22);
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 7px;
+    }
+
+    .value {
+      font-size: 22px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .alarm-panel {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 18px;
+    }
+
+    @media (max-width: 780px) {
+      .alarm-panel { grid-template-columns: 1fr; }
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .controls .wide { grid-column: 1 / -1; }
+
+    label { display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
+    input, select, button {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 15px;
+      padding: 12px 13px;
+      background: rgba(0,0,0,.22);
+      color: var(--text);
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      background: linear-gradient(135deg, #73d2de, #f9d56e);
+      color: #172033;
+      font-weight: 850;
+      transition: transform .12s ease, filter .12s ease;
+    }
+    button:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    button.secondary { background: rgba(255,255,255,.14); color: var(--text); border: 1px solid rgba(255,255,255,.18); }
+    button.danger { background: rgba(255,143,171,.18); color: #ffd7e2; border: 1px solid rgba(255,143,171,.35); }
+
+    .alarm-list {
+      display: grid;
+      gap: 10px;
+      max-height: 340px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .alarm-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid rgba(255,255,255,.12);
+    }
+
+    .alarm-time { font-size: 20px; font-weight: 850; font-variant-numeric: tabular-nums; }
+    .alarm-note { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+    .toast {
+      position: fixed;
+      inset: auto 18px 18px auto;
+      max-width: min(420px, calc(100vw - 36px));
+      padding: 18px;
+      border-radius: 20px;
+      background: rgba(20, 27, 46, .94);
+      border: 1px solid rgba(255,255,255,.2);
+      box-shadow: 0 20px 60px rgba(0,0,0,.45);
+      transform: translateY(140%);
+      transition: transform .18s ease;
+      z-index: 3;
+    }
+    .toast.show { transform: translateY(0); }
+    .toast strong { color: var(--accent2); }
+
+    .footer {
+      color: rgba(255,255,255,.58);
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .status-ok { color: var(--ok); }
+    .status-warn { color: var(--danger); }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>愛爾琳時鐘</h1>
+      <p class="sub">瑪奇時間顯示器＋瀏覽器鬧鈴。現實 36 分鐘 = 愛爾琳 1 天；鬧鈴會在下一次指定的愛爾琳時間響起。</p>
+
+      <div class="time-wrap">
+        <div class="clock-face" aria-label="愛爾琳類比時鐘">
+          <span class="mark m0">0</span><span class="mark m6">6</span><span class="mark m12">12</span><span class="mark m18">18</span>
+          <span id="hourHand" class="hand hour"></span>
+          <span id="minuteHand" class="hand minute"></span>
+          <span id="secondHand" class="hand second"></span>
+          <span class="pin"></span>
+        </div>
+
+        <div class="readout">
+          <div id="phase" class="phase">🌙 夜晚</div>
+          <div id="erinnTime" class="big-time">--:--</div>
+          <div class="grid">
+            <div class="card"><div class="label">現實時間</div><div id="realTime" class="value">--:--:--</div></div>
+            <div class="card"><div class="label">下一個 6:00</div><div id="nextDawn" class="value">--:--</div></div>
+            <div class="card"><div class="label">下一個 18:00</div><div id="nextDusk" class="value">--:--</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="alarm-panel">
+      <div class="card">
+        <h2 style="margin:0 0 14px">新增鬧鈴</h2>
+        <div class="controls">
+          <label>愛爾琳小時
+            <input id="alarmHour" type="number" min="0" max="23" value="6" inputmode="numeric" />
+          </label>
+          <label>愛爾琳分鐘
+            <input id="alarmMinute" type="number" min="0" max="59" value="0" inputmode="numeric" />
+          </label>
+          <label class="wide">備註
+            <input id="alarmLabel" type="text" maxlength="40" placeholder="例如：去打王、等夜晚、採集時間" />
+          </label>
+          <button id="addAlarm">加入鬧鈴</button>
+          <button id="testSound" class="secondary">測試聲音</button>
+        </div>
+        <p id="permissionHint" class="sub" style="margin:14px 0 0">第一次響鈴前，請先按一次「測試聲音」讓瀏覽器允許播放聲音。</p>
+      </div>
+
+      <div class="card">
+        <h2 style="margin:0 0 14px">鬧鈴清單</h2>
+        <div id="alarmList" class="alarm-list"></div>
+      </div>
+    </section>
+
+    <p class="footer">公式：現實 1 秒 = 愛爾琳 40 秒。若你的遊戲內時間有偏移，可用網址參數校正：<code>?offset=秒數</code>，例如 <code>?offset=120</code>。</p>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="assertive"></div>
+
+  <script>
+    const ERINN_DAY_REAL_MS = 36 * 60 * 1000;
+    const ERINN_DAY_SECONDS = 24 * 60 * 60;
+    const params = new URLSearchParams(location.search);
+    const offsetSeconds = Number(params.get('offset') || localStorage.getItem('erinnClockOffset') || 0);
+    const STORAGE_KEY = 'mabinogi-erinn-alarms-v1';
+
+    const $ = (id) => document.getElementById(id);
+    const pad = (n) => String(Math.floor(n)).padStart(2, '0');
+    let audioCtx;
+    let alarms = loadAlarms();
+    let lastSecondOfDay = null;
+
+    function erinnSecondOfDay(date = new Date()) {
+      const realSeconds = Math.floor(date.getTime() / 1000) + offsetSeconds;
+      return ((realSeconds * 40) % ERINN_DAY_SECONDS + ERINN_DAY_SECONDS) % ERINN_DAY_SECONDS;
+    }
+
+    function parseErinn(sec) {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      return { h, m, s };
+    }
+
+    function formatErinn(sec) {
+      const { h, m, s } = parseErinn(sec);
+      return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+
+    function realUntil(targetHour, targetMinute, fromSec = erinnSecondOfDay()) {
+      const target = targetHour * 3600 + targetMinute * 60;
+      let erinnDelta = target - fromSec;
+      if (erinnDelta <= 0) erinnDelta += ERINN_DAY_SECONDS;
+      return Math.ceil(erinnDelta / 40) * 1000;
+    }
+
+    function formatDuration(ms) {
+      const total = Math.max(0, Math.ceil(ms / 1000));
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      return `${m}:${pad(s)}`;
+    }
+
+    function updateClock() {
+      const now = new Date();
+      const sec = erinnSecondOfDay(now);
+      const { h, m, s } = parseErinn(sec);
+      $('erinnTime').textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
+      $('realTime').textContent = now.toLocaleTimeString('zh-TW', { hour12: false });
+      $('nextDawn').textContent = formatDuration(realUntil(6, 0, sec));
+      $('nextDusk').textContent = formatDuration(realUntil(18, 0, sec));
+
+      $('hourHand').style.transform = `rotate(${((h % 12) + m / 60) * 30}deg)`;
+      $('minuteHand').style.transform = `rotate(${(m + s / 60) * 6}deg)`;
+      $('secondHand').style.transform = `rotate(${s * 6}deg)`;
+
+      const isDay = h >= 6 && h < 18;
+      $('phase').textContent = isDay ? '☀️ 白天' : '🌙 夜晚';
+
+      checkAlarms(sec, lastSecondOfDay);
+      lastSecondOfDay = sec;
+      renderAlarms(sec);
+    }
+
+    function loadAlarms() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+      catch { return []; }
+    }
+
+    function saveAlarms() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(alarms));
+    }
+
+    function addAlarm() {
+      const h = clamp(Number($('alarmHour').value), 0, 23);
+      const m = clamp(Number($('alarmMinute').value), 0, 59);
+      $('alarmHour').value = h;
+      $('alarmMinute').value = m;
+      alarms.push({ id: crypto.randomUUID(), hour: h, minute: m, label: $('alarmLabel').value.trim(), enabled: true, lastFiredKey: '' });
+      $('alarmLabel').value = '';
+      saveAlarms();
+      renderAlarms(erinnSecondOfDay());
+      showToast(`已加入 ${pad(h)}:${pad(m)} 的鬧鈴`);
+    }
+
+    function clamp(n, min, max) {
+      if (!Number.isFinite(n)) return min;
+      return Math.min(max, Math.max(min, Math.floor(n)));
+    }
+
+    function deleteAlarm(id) {
+      alarms = alarms.filter(a => a.id !== id);
+      saveAlarms();
+      renderAlarms(erinnSecondOfDay());
+    }
+
+    function toggleAlarm(id) {
+      const alarm = alarms.find(a => a.id === id);
+      if (alarm) alarm.enabled = !alarm.enabled;
+      saveAlarms();
+      renderAlarms(erinnSecondOfDay());
+    }
+
+    function crossedTarget(prev, current, target) {
+      if (prev === null) return false;
+      if (current >= prev) return prev < target && target <= current;
+      return target > prev || target <= current;
+    }
+
+    function checkAlarms(currentSec, prevSec) {
+      const erinnDayNumber = Math.floor((Date.now() / ERINN_DAY_REAL_MS) + offsetSeconds / 2160);
+      for (const alarm of alarms) {
+        if (!alarm.enabled) continue;
+        const target = alarm.hour * 3600 + alarm.minute * 60;
+        const fireKey = `${erinnDayNumber}:${alarm.id}:${alarm.hour}:${alarm.minute}`;
+        if (alarm.lastFiredKey !== fireKey && crossedTarget(prevSec, currentSec, target)) {
+          alarm.lastFiredKey = fireKey;
+          ring(alarm);
+        }
+      }
+      saveAlarms();
+    }
+
+    function renderAlarms(sec = erinnSecondOfDay()) {
+      const list = $('alarmList');
+      if (alarms.length === 0) {
+        list.innerHTML = '<div class="sub" style="margin:0">還沒有鬧鈴。先加一個 6:00 或 18:00 吧～</div>';
+        return;
+      }
+      list.innerHTML = alarms
+        .slice()
+        .sort((a, b) => realUntil(a.hour, a.minute, sec) - realUntil(b.hour, b.minute, sec))
+        .map(a => `
+          <div class="alarm-item">
+            <div>
+              <div class="alarm-time">${pad(a.hour)}:${pad(a.minute)}</div>
+              <div class="alarm-note">${escapeHtml(a.label || '愛爾琳時間到')} · ${a.enabled ? '<span class="status-ok">啟用</span>' : '<span class="status-warn">暫停</span>'} · 還有 ${formatDuration(realUntil(a.hour, a.minute, sec))}</div>
+            </div>
+            <div style="display:grid; gap:7px; min-width:88px">
+              <button class="secondary" onclick="toggleAlarm('${a.id}')">${a.enabled ? '暫停' : '啟用'}</button>
+              <button class="danger" onclick="deleteAlarm('${a.id}')">刪除</button>
+            </div>
+          </div>`).join('');
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+    }
+
+    async function ensureAudio() {
+      audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
+    }
+
+    async function beep() {
+      await ensureAudio();
+      const now = audioCtx.currentTime;
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + i * .18);
+        gain.gain.exponentialRampToValueAtTime(0.22, now + i * .18 + .03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * .18 + .16);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(now + i * .18);
+        osc.stop(now + i * .18 + .18);
+      });
+    }
+
+    async function ring(alarm) {
+      showToast(`<strong>愛爾琳 ${pad(alarm.hour)}:${pad(alarm.minute)} 到了！</strong><br>${escapeHtml(alarm.label || '鬧鈴時間到')}`);
+      try { await beep(); } catch (err) { console.warn(err); }
+      if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+          new Notification(`愛爾琳 ${pad(alarm.hour)}:${pad(alarm.minute)} 到了`, { body: alarm.label || '鬧鈴時間到' });
+        } else if (Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+      }
+    }
+
+    function showToast(html) {
+      const toast = $('toast');
+      toast.innerHTML = html;
+      toast.classList.add('show');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove('show'), 7000);
+    }
+
+    $('addAlarm').addEventListener('click', addAlarm);
+    $('testSound').addEventListener('click', async () => {
+      await beep();
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+      showToast('聲音測試 OK，瀏覽器應該願意叫妳了 `ദ്ദി˶ｰ̀֊ｰ́ )`');
+    });
+
+    updateClock();
+    setInterval(updateClock, 250);
+  </script>
+</body>
+</html>
